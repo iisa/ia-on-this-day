@@ -7,7 +7,6 @@ import './tile-preview';
 import './flip-date';
 import './media-dialog';
 import './otd-info';
-import './otd-ai-blurb';
 
 const PLACEHOLDERS = 5;
 
@@ -139,9 +138,6 @@ export class IaOnThisDay extends LitElement {
             </button>
           `)}
         </div>
-        ${this.loading
-          ? nothing
-          : html`<otd-ai-blurb .items=${this.picks} month-day=${this.monthDay}></otd-ai-blurb>`}
         ${this.failed
           ? html`<p class="status">The archive is napping. Try again in a moment.</p>`
           : html`<ul class="strip" aria-busy=${this.loading}>

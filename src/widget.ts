@@ -1,15 +1,20 @@
 import { LitElement, css, html, nothing, type PropertyValues } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import { MEDIA_TYPES, dailyPicks, detailsUrl, type Item } from './api';
+import { customElement, property, query, state } from 'lit/decorators.js';
+import { FIRST_YEAR, LAST_YEAR, MEDIA_TYPES, dailyPicks, type Item, type MediaType } from './api';
 import { DATE_SORT, eraHue, flipText, monthDayLabel, tileModel, today } from './shared';
+import type { MediaDialog } from './media-dialog';
 import './tile-preview';
 import './flip-date';
+import './media-dialog';
+import './otd-info';
 
 const PLACEHOLDERS = 5;
 
 /**
  * Homepage widget: today's date across the years, one pick per media type.
- * Self-contained (own colours/background) so it drops into any page.
+ * Styled to sit on the archive.org homepage (colours taken from the live page:
+ * #fbfbfd page, white panels, #2c2c2c text, #4b64ff accent, Helvetica).
+ * Tiles behave like the full page: hover previews, click opens the player.
  * The host page needs archive.org's 10px root font size for the tiles.
  */
 @customElement('ia-on-this-day')
@@ -18,13 +23,23 @@ export class IaOnThisDay extends LitElement {
   @property({ attribute: 'full-page-url' }) fullPageUrl = './';
   /** Override the day (MM-DD), mostly for demos. Defaults to today. */
   @property({ attribute: 'month-day' }) monthDay = today();
+  /** Mute audio hover previews (they animate instead). */
+  @property({ type: Boolean }) silent = false;
 
   @state() private picks: Item[] = [];
+  /** All items dated this day across the searched media types and years. */
+  @state() private total = 0;
+  @state() private counts: Partial<Record<MediaType, number>> = {};
+  /** Media type chosen in the breakdown; fills every slot with that type. */
+  @state() private only?: MediaType;
   @state() private loading = true;
   @state() private failed = false;
   @state() private shuffle = 0;
   @state() private previewing?: Item;
+  @state() private playing?: Item;
   @state() private rolling = false;
+
+  @query('media-dialog') private dialog!: MediaDialog;
 
   connectedCallback() {
     super.connectedCallback();
@@ -39,11 +54,13 @@ export class IaOnThisDay extends LitElement {
   private async load() {
     this.loading = true;
     this.failed = false;
-    const { monthDay, shuffle } = this;
+    const { monthDay, shuffle, only } = this;
     try {
-      const picks = await dailyPicks(monthDay, shuffle);
-      if (monthDay !== this.monthDay || shuffle !== this.shuffle) return;
+      const { picks, total, counts } = await dailyPicks(monthDay, shuffle, only);
+      if (monthDay !== this.monthDay || shuffle !== this.shuffle || only !== this.only) return;
       this.picks = picks;
+      this.total = total;
+      this.counts = counts;
       this.failed = !picks.length;
     } catch {
       this.failed = true;
@@ -55,6 +72,18 @@ export class IaOnThisDay extends LitElement {
     this.rolling = true;
     this.shuffle++;
     this.load();
+  }
+
+  /** Toggle filling the strip with one media type (click again for the mix). */
+  private filterTo(type?: MediaType) {
+    this.only = this.only === type ? undefined : type;
+    this.shuffle = 0;
+    this.load();
+  }
+
+  private open(item: Item) {
+    this.playing = item; // pauses hover previews while the player is up
+    this.dialog.show(item);
   }
 
   private get travelHref() {
@@ -83,6 +112,32 @@ export class IaOnThisDay extends LitElement {
             </a>
           </div>
         </div>
+        <p class="count" aria-live="polite">
+          ${this.loading && !this.total
+            ? html`Counting the stacks…`
+            : html`${this.only ? `${MEDIA_TYPES.find(m => m.type === this.only)?.label}: ` : ''}${this.picks.length}
+                picks from
+                <strong>${(this.only ? this.counts[this.only] ?? 0 : this.total).toLocaleString()}</strong>
+                items dated ${monthDayLabel(this.monthDay)}, ${FIRST_YEAR}–${LAST_YEAR}`}
+          <otd-info></otd-info>
+        </p>
+        <div class="breakdown" role="group" aria-label="Show one media type">
+          <button
+            class="type"
+            aria-pressed=${!this.only}
+            @click=${() => this.filterTo(undefined)}
+          >All <strong>${this.total.toLocaleString()}</strong></button>
+          ${MEDIA_TYPES.filter(m => this.counts[m.type] !== undefined).map(m => html`
+            <button
+              class="type"
+              aria-pressed=${this.only === m.type}
+              @click=${() => this.filterTo(m.type)}
+            >
+              <span aria-hidden="true">${m.icon}</span>
+              ${m.label} <strong>${this.counts[m.type]!.toLocaleString()}</strong>
+            </button>
+          `)}
+        </div>
         ${this.failed
           ? html`<p class="status">The archive is napping. Try again in a moment.</p>`
           : html`<ul class="strip" aria-busy=${this.loading}>
@@ -91,6 +146,7 @@ export class IaOnThisDay extends LitElement {
                 : this.picks.map((item, i) => this.renderPick(item, i))}
             </ul>`}
       </section>
+      <media-dialog @media-dialog-close=${() => (this.playing = undefined)}></media-dialog>
     `;
   }
 
@@ -99,22 +155,26 @@ export class IaOnThisDay extends LitElement {
     return html`
       <li style="--era-h:${eraHue(item.year)}; --i:${i}">
         <span class="year">${item.year}</span>
-        <a
+        <button
           class="tile"
-          href=${detailsUrl(item.identifier)}
-          aria-label=${`${item.year}, ${media?.label ?? ''}: ${item.title}`}
+          @click=${() => this.open(item)}
           @mouseenter=${() => (this.previewing = item)}
           @mouseleave=${() => this.previewing === item && (this.previewing = undefined)}
           @focus=${() => (this.previewing = item)}
           @blur=${() => this.previewing === item && (this.previewing = undefined)}
+          aria-label=${`Open ${item.year} ${media?.label ?? ''}: ${item.title}`}
         >
           <item-tile
             .model=${tileModel(item)}
             .baseImageUrl=${'https://archive.org'}
             .sortParam=${DATE_SORT}
           ></item-tile>
-          <tile-preview .item=${item} silent ?active=${this.previewing === item}></tile-preview>
-        </a>
+          <tile-preview
+            .item=${item}
+            ?silent=${this.silent}
+            ?active=${this.previewing === item && !this.playing}
+          ></tile-preview>
+        </button>
         ${media ? html`<span class="kind"><span aria-hidden="true">${media.icon}</span> ${media.label}</span>` : nothing}
       </li>
     `;
@@ -123,90 +183,116 @@ export class IaOnThisDay extends LitElement {
   static styles = css`
     :host {
       display: block;
-      font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      color: #ecebf2;
-      --accent: #ffcf6b;
-      --muted: #9a9cb0;
+      font: 16px/1.5 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #2c2c2c;
+      --ia-accent: #4b64ff;
+      --ia-muted: #666;
+      --ia-border: #ddd;
+      /* split-flap in archive.org's header black */
+      --flap-fg: #fff;
+      --flap-top: #3a3a3a;
+      --flap-bottom: #2c2c2c;
+      /* player dialog, light to match the page */
+      --dialog-bg: #fff;
+      --dialog-fg: #2c2c2c;
+      --dialog-muted: #666;
+      --dialog-link: #4b64ff;
+      --dialog-focus: #4b64ff;
+      --dialog-radius: 5px;
     }
     section {
-      border-radius: 18px; padding: 24px 24px 20px; overflow: hidden;
-      background:
-        radial-gradient(600px 300px at 0% 0%, rgb(124 92 255 / .35), transparent 60%),
-        radial-gradient(500px 300px at 100% 100%, rgb(255 140 60 / .18), transparent 60%),
-        #0b0e17;
-      box-shadow: 0 20px 50px rgb(11 14 23 / .35);
+      background: #fff;
+      border: 1px solid var(--ia-border);
+      border-top: 4px solid #2c2c2c;
+      padding: 20px 24px 16px;
+      box-shadow: 0 1px 3px rgb(0 0 0 / .08);
     }
     .head {
-      display: flex; flex-wrap: wrap; gap: 16px 24px;
-      align-items: center; justify-content: space-between; margin-bottom: 20px;
+      display: flex; flex-wrap: wrap; gap: 12px 24px;
+      align-items: center; justify-content: space-between;
+    }
+    .count {
+      margin: 10px 0 8px; font-size: .85em; color: var(--ia-muted);
+    }
+    .count strong { color: #2c2c2c; }
+    .breakdown {
+      display: flex; flex-wrap: wrap; gap: 6px 8px;
+      margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #eee;
+    }
+    .type {
+      font: inherit; font-size: .82em; white-space: nowrap; cursor: pointer;
+      color: #2c2c2c; background: #fff; border: 1px solid var(--ia-border);
+      border-radius: 5px; padding: 3px 10px;
+      transition: border-color 150ms, background 150ms;
+    }
+    .type:hover { border-color: var(--ia-accent); }
+    .type strong { font-weight: 700; }
+    .type[aria-pressed='true'] {
+      background: #d9edf5; border-color: var(--ia-accent); color: #2c2c2c;
     }
     h2 {
-      margin: 0; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-      font-size: 2.2em; line-height: 1;
+      margin: 0; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      font-size: 1.9em; font-weight: 400; line-height: 1;
     }
-    .lede {
-      font-size: .38em; font-weight: 700; letter-spacing: .3em; text-transform: uppercase;
-      color: var(--muted);
-    }
+    .lede { font-size: .6em; font-weight: 400; color: #2c2c2c; }
     .actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .dice {
-      font: inherit; font-weight: 700; cursor: pointer; color: #1a1300;
-      padding: 8px 18px; border-radius: 999px; border: 0;
-      background: linear-gradient(135deg, #ffcf6b, #ff8a3d);
-      box-shadow: 0 6px 20px rgb(255 140 60 / .35);
-      transition: transform 150ms;
+      font: inherit; font-size: .9em; font-weight: 700; cursor: pointer; color: #fff;
+      padding: 7px 16px; border-radius: 5px; border: 0;
+      background: var(--ia-accent);
+      transition: filter 150ms;
     }
-    .dice:hover:not(:disabled) { transform: translateY(-2px); }
+    .dice:hover:not(:disabled) { filter: brightness(1.1); }
     .dice:disabled { opacity: .6; cursor: progress; }
     .dice.rolling { animation: roll 500ms ease-in-out; }
     @keyframes roll {
-      20% { transform: rotate(-12deg) scale(1.08); }
-      40% { transform: rotate(10deg); }
-      60% { transform: rotate(-6deg); }
-      80% { transform: rotate(3deg); }
+      20% { transform: rotate(-8deg) scale(1.06); }
+      40% { transform: rotate(6deg); }
+      60% { transform: rotate(-4deg); }
+      80% { transform: rotate(2deg); }
     }
-    .travel { color: #8fd3ff; font-weight: 600; text-decoration: none; }
+    .travel { color: var(--ia-accent); font-size: .95em; font-weight: 700; text-decoration: none; }
     .travel:hover { text-decoration: underline; }
     a:focus-visible, button:focus-visible {
-      outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 6px;
+      outline: 3px solid var(--ia-accent); outline-offset: 3px; border-radius: 4px;
     }
 
     .strip {
       list-style: none; margin: 0; padding: 4px 2px 8px;
       display: grid; grid-auto-flow: column; grid-auto-columns: 166px; gap: 20px;
       overflow-x: auto; scroll-snap-type: x proximity;
-      scrollbar-color: hsl(260 60% 55%) transparent;
     }
     .strip > li {
       display: flex; flex-direction: column; gap: 6px; scroll-snap-align: start;
-      animation: rise 450ms both; animation-delay: calc(var(--i) * 70ms);
+      animation: rise 400ms both; animation-delay: calc(var(--i) * 60ms);
     }
-    @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+    /* year label with a thin era-coloured bar: a hint of the timeline, quiet enough for the homepage */
     .year {
-      font-size: 1.5em; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
-      color: hsl(var(--era-h) 90% 72%);
-      text-shadow: 0 0 18px hsl(var(--era-h) 90% 60% / .55);
+      font-size: 1.35em; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums;
+      padding-left: 8px; border-left: 4px solid hsl(var(--era-h) 70% 50%);
     }
     .tile {
-      position: relative; display: block; border-radius: 4px; color: #2c2c2c;
-      text-decoration: none; /* the tile's own hover underlines the title */
-      transition: transform 180ms ease-out, filter 180ms;
+      position: relative; display: block; width: 100%; flex: 1; padding: 0; text-align: left;
+      font: inherit; color: #2c2c2c; background: none; border: 0; border-radius: 4px;
+      cursor: pointer; transition: transform 180ms ease-out, box-shadow 180ms;
     }
     .tile:hover, .tile:focus-visible {
-      transform: translateY(-5px) rotate(-.6deg);
-      filter: drop-shadow(0 12px 20px rgb(0 0 0 / .5)) drop-shadow(0 0 12px hsl(var(--era-h) 90% 60% / .45));
+      transform: translateY(-3px);
+      box-shadow: 0 8px 18px rgb(0 0 0 / .15);
     }
-    item-tile { display: block; min-height: 280px; }
+    /* li's stretch to the tallest in the row; tiles fill them so heights match */
+    item-tile { display: block; height: 100%; min-height: 280px; }
     /* Sits exactly over item-tile's image block (measured: 1px inset, 170px tall). */
     tile-preview { inset: 1px 1px auto 1px; height: 170px; }
-    .kind { font-size: .75em; color: var(--muted); }
+    .kind { font-size: .8em; color: var(--ia-muted); }
     .skeleton {
-      height: 310px; border-radius: 6px;
-      background: linear-gradient(100deg, #1a1e2b 30%, #262b3c 50%, #1a1e2b 70%) 0 0 / 300% 100%;
+      height: 310px; border-radius: 4px;
+      background: linear-gradient(100deg, #f1f1f1 30%, #e6e6e6 50%, #f1f1f1 70%) 0 0 / 300% 100%;
       animation: shimmer 1.4s linear infinite;
     }
     @keyframes shimmer { to { background-position: -100% 0; } }
-    .status { color: var(--muted); margin: 0; }
+    .status { color: var(--ia-muted); margin: 0; }
 
     @media (prefers-reduced-motion: reduce) {
       .strip > li, .dice.rolling, .skeleton { animation: none; }

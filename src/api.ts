@@ -33,8 +33,8 @@ export interface WebCapture {
 
 // Collection dates after ~2005 are often upload dates, which drown out the
 // interesting historical items, so we cap the range.
-const FIRST_YEAR = 1900;
-const LAST_YEAR = 2005;
+export const FIRST_YEAR = 1900;
+export const LAST_YEAR = 2005;
 const ROWS_PER_TYPE = 200;
 
 // --- tiny concurrency limiter so we stay polite to production search ---
@@ -70,8 +70,15 @@ function cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
 const first = (v: unknown): string =>
   String(Array.isArray(v) ? v[0] ?? '' : v ?? '');
 
+export interface MediaResults {
+  /** Top items by downloads (up to ROWS_PER_TYPE). */
+  items: Item[];
+  /** Every item of this type dated this month-day in the year range. */
+  total: number;
+}
+
 /** Top items (by downloads) for this month-day across FIRST_YEAR..LAST_YEAR. */
-export function searchMedia(monthDay: string, mediatype: MediaType): Promise<Item[]> {
+export function searchMedia(monthDay: string, mediatype: MediaType): Promise<MediaResults> {
   return cached(`search:${monthDay}:${mediatype}`, async () => {
     const dates: string[] = [];
     for (let y = FIRST_YEAR; y <= LAST_YEAR; y++) dates.push(`${y}-${monthDay}`);
@@ -87,7 +94,7 @@ export function searchMedia(monthDay: string, mediatype: MediaType): Promise<Ite
     if (!res.ok) throw new Error(`search ${mediatype}: HTTP ${res.status}`);
     const json = await res.json();
 
-    return (json.response?.docs ?? [])
+    const items = (json.response?.docs ?? [])
       .map((d: Record<string, unknown>): Item => {
         const date = first(d.date).slice(0, 10);
         return {
@@ -101,6 +108,7 @@ export function searchMedia(monthDay: string, mediatype: MediaType): Promise<Ite
       })
       // Multi-valued dates can fall outside the requested day; keep exact matches.
       .filter((i: Item) => i.title && i.date.endsWith(monthDay));
+    return { items, total: Number(json.response?.numFound) || 0 };
   });
 }
 
@@ -207,27 +215,53 @@ export const isRestricted = (item: Item) => {
  * strip spans as much time as it can. Results arrive sorted by downloads, so
  * each pick is the most-viewed item from a year not used yet.
  *
+ * With `only`, every pick is that media type instead (still one per year).
+ *
  * TODO(homepage): at archive.org traffic this should be precomputed once a day
  * into a cached JSON file (plus a human review), not live searches per visit.
  */
-export async function dailyPicks(monthDay: string, shuffle = 0): Promise<Item[]> {
+export async function dailyPicks(
+  monthDay: string,
+  shuffle = 0,
+  only?: MediaType,
+  count = 5,
+): Promise<{ picks: Item[]; total: number; counts: Partial<Record<MediaType, number>> }> {
   const results = await Promise.allSettled(
     MEDIA_TYPES.map(m => searchMedia(monthDay, m.type)),
   );
-  const usedYears = new Set<number>();
-  const picks: Item[] = [];
-  for (const r of results) {
+  const counts: Partial<Record<MediaType, number>> = {};
+  const pools: Item[][] = [];
+  let total = 0;
+  for (const [t, r] of results.entries()) {
     if (r.status !== 'fulfilled') continue;
-    const candidates = r.value.filter(i => !isRestricted(i)).slice(0, 25);
+    const type = MEDIA_TYPES[t].type;
+    total += r.value.total;
+    counts[type] = r.value.total;
+    if (only && type !== only) continue;
+    const pool = r.value.items.filter(i => !isRestricted(i)).slice(0, only ? 60 : 25);
+    if (!only) {
+      pools.push(pool);
+    } else {
+      // One type fills every slot: split its pool into `count` interleaved lanes.
+      for (let lane = 0; lane < count; lane++) pools.push(pool.filter((_, n) => n % count === lane));
+    }
+  }
+
+  const usedYears = new Set<number>();
+  const usedIds = new Set<string>();
+  const picks: Item[] = [];
+  for (const pool of pools) {
+    const candidates = pool.filter(i => !usedIds.has(i.identifier));
     if (!candidates.length) continue;
     // `shuffle` rotates through the top candidates for the 🎲 button.
     const k = shuffle % candidates.length;
     const rotated = [...candidates.slice(k), ...candidates.slice(0, k)];
     const pick = rotated.find(i => !usedYears.has(i.year)) ?? rotated[0];
     usedYears.add(pick.year);
+    usedIds.add(pick.identifier);
     picks.push(pick);
   }
-  return picks.sort((a, b) => a.year - b.year);
+  return { picks: picks.sort((a, b) => a.year - b.year), total, counts };
 }
 
 export const thumbUrl = (id: string) => `https://archive.org/services/img/${id}`;

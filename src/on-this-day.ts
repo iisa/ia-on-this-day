@@ -2,10 +2,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { customElement, query, state } from 'lit/decorators.js';
 import {
   MEDIA_TYPES,
-  detailsUrl,
-  embedUrl,
   searchMedia,
-  thumbUrl,
   waybackClosest,
   waybackFrameUrl,
   waybackUrl,
@@ -24,6 +21,9 @@ import {
 } from './shared';
 import './tile-preview';
 import './flip-date';
+import type { MediaDialog } from './media-dialog';
+import './media-dialog';
+import './otd-info';
 
 const WEB_SITES = ['nytimes.com', 'yahoo.com', 'cnn.com', 'whitehouse.gov', 'archive.org'];
 const WEB_YEARS = [1996, 2000, 2005, 2010, 2015, 2020, 2025];
@@ -70,7 +70,7 @@ export class OnThisDay extends LitElement {
   @state() private previewing?: Item;
   @state() private rolling = false;
 
-  @query('dialog') private dialog!: HTMLDialogElement;
+  @query('media-dialog') private dialog!: MediaDialog;
 
   connectedCallback() {
     super.connectedCallback();
@@ -106,7 +106,7 @@ export class OnThisDay extends LitElement {
         return;
       }
       // Results are sorted by downloads, so the first item per year wins.
-      for (const item of r.value) {
+      for (const item of r.value.items) {
         const row = byYear.get(item.year) ?? { year: item.year, hits: 0, items: {} };
         row.hits++;
         row.items[item.mediatype] ??= item;
@@ -248,16 +248,8 @@ export class OnThisDay extends LitElement {
   }
 
   private open(item: Item) {
-    this.selected = item;
-    this.updateComplete.then(() => this.dialog.showModal());
-  }
-
-  private close() {
-    this.dialog.close();
-  }
-
-  private onDialogClose() {
-    this.selected = undefined; // unloads the player iframe
+    this.selected = item; // pauses hover previews while the player is up
+    this.dialog.show(item);
   }
 
   render() {
@@ -268,6 +260,7 @@ export class OnThisDay extends LitElement {
           <span class="lede">On this day</span>
           <flip-date .text=${this.flipText} .label=${this.monthDayLabel}></flip-date>
         </h1>
+        <p class="about"><otd-info web></otd-info></p>
         <div class="controls">
           <button
             class="dice ${this.rolling ? 'rolling' : ''}"
@@ -309,9 +302,7 @@ export class OnThisDay extends LitElement {
           : this.renderRows()}
       </section>
 
-      <dialog @close=${this.onDialogClose} aria-labelledby="dialog-title">
-        ${this.selected ? this.renderPlayer(this.selected) : nothing}
-      </dialog>
+      <media-dialog @media-dialog-close=${() => (this.selected = undefined)}></media-dialog>
     `;
   }
 
@@ -439,28 +430,6 @@ export class OnThisDay extends LitElement {
     `;
   }
 
-  private renderPlayer(item: Item) {
-    const playable = item.mediatype !== 'image';
-    return html`
-      <div class="dialog-head">
-        <h2 id="dialog-title">${item.title}</h2>
-        <button class="close" @click=${this.close} aria-label="Close">✕</button>
-      </div>
-      <p class="meta">${prettyDate(item.date)}</p>
-      ${playable
-        ? html`<iframe
-            class="player ${item.mediatype}"
-            src=${embedUrl(item.identifier)}
-            title=${`Player: ${item.title}`}
-            allowfullscreen
-          ></iframe>`
-        : html`<img class="player" src=${thumbUrl(item.identifier)} alt=${item.title} />`}
-      <p><a href=${detailsUrl(item.identifier)} target="_blank" rel="noopener">
-        View on archive.org <span class="visually-hidden">(opens in new tab)</span>
-      </a></p>
-    `;
-  }
-
   static styles = css`
     :host {
       display: block;
@@ -489,6 +458,14 @@ export class OnThisDay extends LitElement {
       font-size: .75em; color: var(--accent); margin: 0;
     }
     .controls { justify-content: center; }
+    .about {
+      margin: -12px 0 16px; font-size: 1.1em;
+      --info-accent: var(--accent);
+      --info-hover: rgb(255 207 107 / .15);
+      --info-bg: var(--surface);
+      --info-fg: var(--fg);
+      --info-border: var(--border);
+    }
     .dice {
       font-size: 1.15em; font-weight: 700; cursor: pointer;
       padding: 12px 24px; border-radius: 999px; border: 0;
@@ -644,24 +621,6 @@ export class OnThisDay extends LitElement {
     .kind { font-size: .75em; color: var(--muted); }
     .show-all { margin-top: 16px; }
 
-    /* Dialog */
-    dialog {
-      width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
-      border: 1px solid var(--border); border-radius: 12px;
-      background: var(--bg); color: var(--fg); padding: 20px;
-    }
-    dialog::backdrop { background: rgb(0 0 0 / .6); }
-    .dialog-head { display: flex; gap: 16px; justify-content: space-between; align-items: start; }
-    .dialog-head h2 { margin: 0; font-size: 1.2em; }
-    .close {
-      background: none; border: 0; font-size: 1.2em; cursor: pointer; padding: 4px 8px;
-    }
-    .meta { color: var(--muted); margin: 4px 0 12px; }
-    .player { width: 100%; border: 0; border-radius: 8px; }
-    iframe.player { aspect-ratio: 16 / 9; }
-    iframe.player.audio, iframe.player.etree { aspect-ratio: auto; height: 360px; }
-    iframe.player.texts { aspect-ratio: 4 / 3; }
-    img.player { max-height: 70vh; object-fit: contain; }
 
     .visually-hidden {
       position: absolute; width: 1px; height: 1px; overflow: hidden;

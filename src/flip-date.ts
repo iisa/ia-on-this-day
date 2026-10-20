@@ -33,8 +33,8 @@ export class FlipDate extends LitElement {
       position: relative; display: inline-grid; place-items: center;
       width: .78em; height: 1.15em;
       font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-weight: 700;
-      color: #ffe9b0;
-      background: linear-gradient(#24272f 0 49%, #15171c 51% 100%);
+      color: var(--flap-fg, #ffe9b0);
+      background: linear-gradient(var(--flap-top, #24272f) 0 49%, var(--flap-bottom, #15171c) 51% 100%);
       border-radius: .08em;
       box-shadow: 0 .06em .12em rgb(0 0 0 / .6), inset 0 0 0 1px rgb(255 255 255 / .06);
       transform-origin: 50% 50%;

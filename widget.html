@@ -15,9 +15,11 @@
       }
       .note {
         background: #fff4d6; border-bottom: 1px solid #ecd9a6;
-        padding: 8px 16px; font-size: 14px; text-align: center;
+        padding: 8px 16px; font-size: 14px;
+        display: flex; flex-wrap: wrap; gap: 8px 16px;
+        align-items: center; justify-content: space-between;
       }
-      .note a { color: #0b6e99; }
+      .note p { margin: 0; }
       header.mock { background: #2c2c2c; color: #eee; padding: 14px 16px; font-weight: 700; }
       .band {
         background: #666; color: #fff; text-align: center; padding: 28px 16px;
@@ -32,13 +34,17 @@
       .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 32px; }
       .row .placeholder { height: 120px; }
     </style>
+    <link rel="stylesheet" href="./src/demo-nav.css" />
     <script type="module" src="/src/widget.ts"></script>
   </head>
   <body>
-    <p class="note">
-      Homepage preview: the dashed boxes stand in for existing homepage content.
-      <a href="./">Open the full timeline</a>
-    </p>
+    <div class="note">
+      <p>Homepage preview: the dashed boxes stand in for existing homepage content.</p>
+      <nav class="demo-nav inline" aria-label="Demo views">
+        <a href="./">Timeline</a>
+        <a href="./widget.html" aria-current="page">Homepage widget</a>
+      </nav>
+    </div>
     <header class="mock">Site header</header>
     <div class="band"><div class="placeholder">Search band</div></div>
     <main>

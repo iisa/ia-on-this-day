@@ -63,7 +63,9 @@ export class OnThisDay extends LitElement {
   @state() private rows: YearRow[] = [];
   @state() private web: (WebCapture | null)[] = [];
   @state() private loading = false;
-  @state() private webLoading = false;
+  // Starts true: web captures load after the collections, and until then
+  // there's nothing to show (not "no captures").
+  @state() private webLoading = true;
   @state() private errors: string[] = [];
   @state() private showAll = false;
   @state() private selected?: Item;
@@ -90,6 +92,7 @@ export class OnThisDay extends LitElement {
 
   private async load() {
     this.loading = true;
+    this.webLoading = true; // don't leave the previous day's captures up
     this.errors = [];
     this.rows = [];
     const monthDay = this.monthDay;

@@ -6,14 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>On This Day · Internet Archive</title>
     <link rel="stylesheet" href="./src/index.css" />
+    <link rel="stylesheet" href="./src/demo-nav.css" />
     <script type="module" src="/src/on-this-day.ts"></script>
   </head>
   <body>
+    <nav class="demo-nav" aria-label="Demo views">
+      <a href="./" aria-current="page">Timeline</a>
+      <a href="./widget.html">Homepage widget</a>
+    </nav>
     <main>
       <on-this-day></on-this-day>
     </main>
-    <footer class="site-footer">
-      <a href="./widget.html">See the homepage widget →</a>
-    </footer>
   </body>
 </html>

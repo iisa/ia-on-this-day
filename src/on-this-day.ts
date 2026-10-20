@@ -24,6 +24,7 @@ import './flip-date';
 import type { MediaDialog } from './media-dialog';
 import './media-dialog';
 import './otd-info';
+import './otd-ai-blurb';
 
 const WEB_SITES = ['nytimes.com', 'yahoo.com', 'cnn.com', 'whitehouse.gov', 'archive.org'];
 const WEB_YEARS = [1996, 2000, 2005, 2010, 2015, 2020, 2025];
@@ -155,6 +156,17 @@ export class OnThisDay extends LitElement {
       }
     }
     return [...best.values()].slice(-TOP_YEARS);
+  }
+
+  /** One item per visible year for the AI note, rotating media types for a mix. */
+  private get blurbItems(): Item[] {
+    return this.visibleRows
+      .map((r, n) => {
+        const order = [...MEDIA_TYPES.slice(n % MEDIA_TYPES.length), ...MEDIA_TYPES.slice(0, n % MEDIA_TYPES.length)];
+        return order.map(m => r.items[m.type]).find(Boolean);
+      })
+      .filter((i): i is Item => !!i)
+      .slice(0, 10);
   }
 
   private setMonthDay(monthDay: string, pinnedYear?: number) {
@@ -300,6 +312,9 @@ export class OnThisDay extends LitElement {
       <section aria-labelledby="collections-heading">
         <h2 id="collections-heading">From the collections</h2>
         ${this.errors.map(e => html`<p class="error" role="alert">${e}</p>`)}
+        ${this.loading ? nothing : html`
+          <otd-ai-blurb class="ai" .items=${this.blurbItems} month-day=${this.monthDay}></otd-ai-blurb>
+        `}
         ${this.loading
           ? html`<p class="status" role="status">Searching the stacks…</p>`
           : this.renderRows()}
@@ -461,6 +476,14 @@ export class OnThisDay extends LitElement {
       font-size: .75em; color: var(--accent); margin: 0;
     }
     .controls { justify-content: center; }
+    otd-ai-blurb.ai {
+      max-width: 760px;
+      --ai-accent: var(--accent);
+      --ai-bg: rgb(255 207 107 / .07);
+      --ai-border: rgb(255 207 107 / .3);
+      --ai-fg: var(--fg);
+      --ai-muted: var(--muted);
+    }
     .about {
       margin: -12px 0 16px; font-size: 1.1em;
       --info-accent: var(--accent);

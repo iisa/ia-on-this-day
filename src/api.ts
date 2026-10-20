@@ -192,7 +192,45 @@ export function previewFor(item: Item): Promise<Preview | null> {
   });
 }
 
-export const thumbUrl =(id: string) => `https://archive.org/services/img/${id}`;
+// Collections that mark items as sensitive or members-only. The full page
+// blurs these via TileModel flags; the homepage widget leaves them out entirely.
+const RESTRICTED_COLLECTIONS = ['no-preview', 'loggedin'];
+
+export const isRestricted = (item: Item) => {
+  const c = item.raw.collection;
+  const list = Array.isArray(c) ? c : c ? [c] : [];
+  return list.some(name => RESTRICTED_COLLECTIONS.includes(String(name)));
+};
+
+/**
+ * One pick per media type, each from a different year where possible, so the
+ * strip spans as much time as it can. Results arrive sorted by downloads, so
+ * each pick is the most-viewed item from a year not used yet.
+ *
+ * TODO(homepage): at archive.org traffic this should be precomputed once a day
+ * into a cached JSON file (plus a human review), not live searches per visit.
+ */
+export async function dailyPicks(monthDay: string, shuffle = 0): Promise<Item[]> {
+  const results = await Promise.allSettled(
+    MEDIA_TYPES.map(m => searchMedia(monthDay, m.type)),
+  );
+  const usedYears = new Set<number>();
+  const picks: Item[] = [];
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const candidates = r.value.filter(i => !isRestricted(i)).slice(0, 25);
+    if (!candidates.length) continue;
+    // `shuffle` rotates through the top candidates for the 🎲 button.
+    const k = shuffle % candidates.length;
+    const rotated = [...candidates.slice(k), ...candidates.slice(0, k)];
+    const pick = rotated.find(i => !usedYears.has(i.year)) ?? rotated[0];
+    usedYears.add(pick.year);
+    picks.push(pick);
+  }
+  return picks.sort((a, b) => a.year - b.year);
+}
+
+export const thumbUrl = (id: string) => `https://archive.org/services/img/${id}`;
 export const detailsUrl = (id: string) => `https://archive.org/details/${id}`;
 export const embedUrl = (id: string) => `https://archive.org/embed/${id}`;
 // `if_` = iframe mode: rewritten links, no Wayback toolbar.

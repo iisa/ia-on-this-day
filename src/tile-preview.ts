@@ -17,6 +17,8 @@ const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').match
 export class TilePreview extends LitElement {
   @property({ attribute: false }) item!: Item;
   @property({ type: Boolean }) active = false;
+  /** No sound: audio tiles just animate (for the homepage widget). */
+  @property({ type: Boolean }) silent = false;
 
   @state() private preview?: Preview | null;
   @state() private showing = false;
@@ -92,9 +94,16 @@ export class TilePreview extends LitElement {
             ? html`<img class="waveform" src=${p.waveform} alt="" />`
             : html`<div class="bars">${Array.from({ length: 12 }, (_, i) =>
                 html`<span style="animation-delay:${i * -97}ms"></span>`)}</div>`}
-          <div class="playhead" style="left:${this.progress * 100}%"></div>
-          <span class="badge">${this.blocked ? '🔇 click anywhere to enable sound' : '🔊 playing'}</span>
-          <audio src=${p.src} @timeupdate=${this.onTimeUpdate}></audio>
+          ${this.silent
+            ? html`
+              <div class="playhead scanning"></div>
+              <span class="badge">🎧 click to listen</span>
+            `
+            : html`
+              <div class="playhead" style="left:${this.progress * 100}%"></div>
+              <span class="badge">${this.blocked ? '🔇 click anywhere to enable sound' : '🔊 playing'}</span>
+              <audio src=${p.src} @timeupdate=${this.onTimeUpdate}></audio>
+            `}
         `;
       case 'pages':
         return html`
@@ -128,6 +137,8 @@ export class TilePreview extends LitElement {
       position: absolute; top: 0; bottom: 0; width: 2px;
       background: #f0a500; box-shadow: 0 0 8px #f0a500;
     }
+    .playhead.scanning { animation: scan 2.4s linear infinite; }
+    @keyframes scan { from { left: 0; } to { left: 100%; } }
     .bars {
       position: absolute; inset: 20% 10%; display: flex; gap: 4px; align-items: end;
     }
@@ -152,7 +163,7 @@ export class TilePreview extends LitElement {
     @keyframes bounce { to { height: 95%; } }
 
     @media (prefers-reduced-motion: reduce) {
-      .zoom, .bars span, .layer { animation: none; }
+      .zoom, .bars span, .layer, .playhead.scanning { animation: none; }
     }
   `;
 }

@@ -8,10 +8,11 @@ import './flip-date';
 import './media-dialog';
 import './otd-info';
 
-const PLACEHOLDERS = 5;
+/** Tiles in the strip: two per media type in the mix. */
+const PICKS = 10;
 
 /**
- * Homepage widget: today's date across the years, one pick per media type.
+ * Homepage widget: today's date across the years, ten picks (two per media type).
  * Styled to sit on the archive.org homepage (colours taken from the live page:
  * #fbfbfd page, white panels, #2c2c2c text, #4b64ff accent, Helvetica).
  * Tiles behave like the full page: hover previews, click opens the player.
@@ -56,7 +57,7 @@ export class IaOnThisDay extends LitElement {
     this.failed = false;
     const { monthDay, shuffle, only } = this;
     try {
-      const { picks, total, counts } = await dailyPicks(monthDay, shuffle, only);
+      const { picks, total, counts } = await dailyPicks(monthDay, shuffle, only, PICKS);
       if (monthDay !== this.monthDay || shuffle !== this.shuffle || only !== this.only) return;
       this.picks = picks;
       this.total = total;
@@ -142,7 +143,7 @@ export class IaOnThisDay extends LitElement {
           ? html`<p class="status">The archive is napping. Try again in a moment.</p>`
           : html`<ul class="strip" aria-busy=${this.loading}>
               ${this.loading
-                ? Array.from({ length: PLACEHOLDERS }, () => html`<li class="skeleton"></li>`)
+                ? Array.from({ length: PICKS }, () => html`<li class="skeleton"></li>`)
                 : this.picks.map((item, i) => this.renderPick(item, i))}
             </ul>`}
       </section>
@@ -257,10 +258,19 @@ export class IaOnThisDay extends LitElement {
       outline: 3px solid var(--ia-accent); outline-offset: 3px; border-radius: 4px;
     }
 
+    /* Wraps into rows (5 across at homepage width). Columns stay 166px because
+       tile-preview's overlay is sized to item-tile's image block at that width. */
     .strip {
       list-style: none; margin: 0; padding: 4px 2px 8px;
-      display: grid; grid-auto-flow: column; grid-auto-columns: 166px; gap: 20px;
-      overflow-x: auto; scroll-snap-type: x proximity;
+      display: grid; grid-template-columns: repeat(auto-fill, 166px);
+      justify-content: space-between; gap: 24px 20px;
+    }
+    /* Phones: one swipeable row instead of a 10-tile-tall column. */
+    @media (max-width: 600px) {
+      .strip {
+        grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 166px;
+        justify-content: start; overflow-x: auto; scroll-snap-type: x proximity;
+      }
     }
     .strip > li {
       display: flex; flex-direction: column; gap: 6px; scroll-snap-align: start;

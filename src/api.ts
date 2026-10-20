@@ -80,8 +80,13 @@ export interface MediaResults {
 /** Top items (by downloads) for this month-day across FIRST_YEAR..LAST_YEAR. */
 export function searchMedia(monthDay: string, mediatype: MediaType): Promise<MediaResults> {
   return cached(`search:${monthDay}:${mediatype}`, async () => {
+    // Skip dates that don't exist (Feb 29 in non-leap years): a single invalid
+    // date makes the search backend fail the whole query.
+    const [month, day] = monthDay.split('-').map(Number);
     const dates: string[] = [];
-    for (let y = FIRST_YEAR; y <= LAST_YEAR; y++) dates.push(`${y}-${monthDay}`);
+    for (let y = FIRST_YEAR; y <= LAST_YEAR; y++) {
+      if (new Date(Date.UTC(y, month - 1, day)).getUTCDate() === day) dates.push(`${y}-${monthDay}`);
+    }
 
     const params = new URLSearchParams();
     params.set('q', `date:(${dates.join(' OR ')}) AND mediatype:${mediatype}`);
@@ -211,9 +216,10 @@ export const isRestricted = (item: Item) => {
 };
 
 /**
- * One pick per media type, each from a different year where possible, so the
- * strip spans as much time as it can. Results arrive sorted by downloads, so
- * each pick is the most-viewed item from a year not used yet.
+ * `count` picks spread evenly over the media types (10 → two per type), each
+ * from a different year where possible, so the strip spans as much time as it
+ * can. Results arrive sorted by downloads, so each pick is the most-viewed item
+ * from a year not used yet.
  *
  * With `only`, every pick is that media type instead (still one per year).
  *
@@ -224,13 +230,15 @@ export async function dailyPicks(
   monthDay: string,
   shuffle = 0,
   only?: MediaType,
-  count = 5,
+  count = 10,
 ): Promise<{ picks: Item[]; total: number; counts: Partial<Record<MediaType, number>> }> {
   const results = await Promise.allSettled(
     MEDIA_TYPES.map(m => searchMedia(monthDay, m.type)),
   );
   const counts: Partial<Record<MediaType, number>> = {};
-  const pools: Item[][] = [];
+  // Each type's pool is split into interleaved "lanes", one lane per slot it fills.
+  const lanesPerType = only ? count : Math.ceil(count / MEDIA_TYPES.length);
+  const lanesByType: Item[][][] = [];
   let total = 0;
   for (const [t, r] of results.entries()) {
     if (r.status !== 'fulfilled') continue;
@@ -238,13 +246,17 @@ export async function dailyPicks(
     total += r.value.total;
     counts[type] = r.value.total;
     if (only && type !== only) continue;
-    const pool = r.value.items.filter(i => !isRestricted(i)).slice(0, only ? 60 : 25);
-    if (!only) {
-      pools.push(pool);
-    } else {
-      // One type fills every slot: split its pool into `count` interleaved lanes.
-      for (let lane = 0; lane < count; lane++) pools.push(pool.filter((_, n) => n % count === lane));
-    }
+    const pool = r.value.items.filter(i => !isRestricted(i)).slice(0, lanesPerType * 12);
+    lanesByType.push(
+      Array.from({ length: lanesPerType }, (_, lane) =>
+        pool.filter((_, n) => n % lanesPerType === lane)),
+    );
+  }
+  // Lane-major order (every type's 1st lane, then every type's 2nd…) keeps the
+  // mix even and lets other types fill in when one type runs short.
+  const pools: Item[][] = [];
+  for (let lane = 0; lane < lanesPerType; lane++) {
+    for (const lanes of lanesByType) pools.push(lanes[lane]);
   }
 
   const usedYears = new Set<number>();
@@ -261,7 +273,14 @@ export async function dailyPicks(
     usedIds.add(pick.identifier);
     picks.push(pick);
   }
-  return { picks: picks.sort((a, b) => a.year - b.year), total, counts };
+  // Top up from whatever is left if a type ran dry (e.g. no live music that day).
+  for (const item of pools.flat()) {
+    if (picks.length >= count) break;
+    if (usedIds.has(item.identifier)) continue;
+    usedIds.add(item.identifier);
+    picks.push(item);
+  }
+  return { picks: picks.slice(0, count).sort((a, b) => a.year - b.year), total, counts };
 }
 
 export const thumbUrl = (id: string) => `https://archive.org/services/img/${id}`;

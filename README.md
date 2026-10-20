@@ -38,7 +38,7 @@ Then open http://localhost:5173/ (full timeline) or http://localhost:5173/widget
 | `month-day` | Show a specific day (`MM-DD`) instead of today. |
 | `silent` | Mute audio hover previews; they animate instead. |
 
-Under the header, the widget shows how many items are dated that day, broken down by media type. Click a type (🎬 Film & TV, 🎵 Audio, 🎸 Live music, 📄 Texts, 🖼️ Images) to fill all five slots with it; click it again, or **All**, to go back to the mix.
+Under the header, the widget shows how many items are dated that day, broken down by media type. Click a type (🎬 Film & TV, 🎵 Audio, 🎸 Live music, 📄 Texts, 🖼️ Images) to fill all ten tiles with it; click it again, or **All**, to go back to the mix.
 
 The widget expects the page's root font size to be 10px, as on archive.org, because the collection-browser tiles size their text in `rem`.
 

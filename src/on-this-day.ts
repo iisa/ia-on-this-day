@@ -222,16 +222,6 @@ export class OnThisDay extends LitElement {
     requestAnimationFrame(step);
   }
 
-  /** Mouse wheels scroll vertically; turn that into sideways travel on the track. */
-  private onTrackWheel(e: WheelEvent) {
-    const track = this.track;
-    if (!track || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // trackpads already go sideways
-    const atStart = track.scrollLeft <= 0 && e.deltaY < 0;
-    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1 && e.deltaY > 0;
-    if (atStart || atEnd) return; // let the page scroll once we hit an end
-    e.preventDefault();
-    track.scrollLeft += e.deltaY;
-  }
 
   protected updated() {
     // After a new date loads, bring the pinned year (or the start) into view.
@@ -373,15 +363,17 @@ export class OnThisDay extends LitElement {
     const hidden = this.rows.length - this.visibleRows.length;
     return html`
       <div class="track-nav">
+        <span class="track-tip">Swipe or Shift + scroll to travel</span>
         <button @click=${() => this.scrollTrack(-1)} aria-label="Earlier years">◀</button>
         <span class="track-hint">${this.visibleRows[0]?.year} → ${this.visibleRows.at(-1)?.year}</span>
         <button @click=${() => this.scrollTrack(1)} aria-label="Later years">▶</button>
       </div>
+      <!-- The mouse wheel is left to the page (vertical); sideways travel is
+           trackpad swipe, Shift + scroll, the ◀ ▶ buttons, or arrow keys. -->
       <ol
         class="years"
         tabindex="0"
         aria-label="Timeline of years, scrolls sideways"
-        @wheel=${this.onTrackWheel}
       >
         ${this.visibleRows.map((row, r) => html`
           <li
@@ -547,6 +539,8 @@ export class OnThisDay extends LitElement {
       display: flex; align-items: center; justify-content: flex-end; gap: 12px;
       margin: -8px 0 8px; color: var(--muted); font-variant-numeric: tabular-nums;
     }
+    .track-tip { font-size: .8em; margin-right: auto; }
+    @media (hover: none) { .track-tip { display: none; } }
     .track-nav button {
       width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
       background: rgb(255 255 255 / .05); border: 1px solid var(--border);

@@ -120,8 +120,8 @@ export class IaOnThisDay extends LitElement {
                 picks from
                 <strong>${(this.only ? this.counts[this.only] ?? 0 : this.total).toLocaleString()}</strong>
                 items dated ${monthDayLabel(this.monthDay)}, ${FIRST_YEAR}–${LAST_YEAR}`}
-          <otd-info></otd-info>
         </p>
+        <otd-info class="about"></otd-info>
         <div class="breakdown" role="group" aria-label="Show one media type">
           <button
             class="type"
@@ -216,6 +216,12 @@ export class IaOnThisDay extends LitElement {
       margin: 10px 0 8px; font-size: .85em; color: var(--ia-muted);
     }
     .count strong { color: #2c2c2c; }
+    otd-info.about {
+      margin: 0 0 12px; font-size: 13px;
+      --info-accent: var(--ia-accent);
+      --info-muted: var(--ia-muted);
+      --info-border: #d9edf5;
+    }
     .breakdown {
       display: flex; flex-wrap: wrap; gap: 6px 8px;
       margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #eee;

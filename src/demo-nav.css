@@ -33,6 +33,20 @@
   outline: 3px solid #ffcf6b;
   outline-offset: 2px;
 }
+/* External link to the repo, set apart from the two view tabs. */
+.demo-nav a.code {
+  margin-left: 4px;
+  border-left: 1px solid rgb(255 255 255 / .18);
+  border-radius: 0 999px 999px 0;
+}
+.demo-nav .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 /* In-flow variant, for pages with a bar to sit in (the widget preview). */
 .demo-nav.inline {
   position: static;

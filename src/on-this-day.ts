@@ -253,7 +253,7 @@ export class OnThisDay extends LitElement {
           <span class="lede">On this day</span>
           <flip-date .text=${this.flipText} .label=${this.monthDayLabel}></flip-date>
         </h1>
-        <p class="about"><otd-info web></otd-info></p>
+        <otd-info class="about" web></otd-info>
         <div class="controls">
           <button
             class="dice ${this.rolling ? 'rolling' : ''}"
@@ -453,13 +453,13 @@ export class OnThisDay extends LitElement {
       font-size: .75em; color: var(--accent); margin: 0;
     }
     .controls { justify-content: center; }
+    /* centred block under the date; its own text reads left-aligned */
     .about {
-      margin: -12px 0 16px; font-size: 1.1em;
+      max-width: 460px; margin: -8px auto 24px; text-align: left;
       --info-accent: var(--accent);
-      --info-hover: rgb(255 207 107 / .15);
-      --info-bg: var(--surface);
       --info-fg: var(--fg);
-      --info-border: var(--border);
+      --info-muted: var(--muted);
+      --info-border: rgb(255 207 107 / .35);
     }
     .dice {
       font-size: 1.15em; font-weight: 700; cursor: pointer;

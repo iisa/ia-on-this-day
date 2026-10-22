@@ -455,7 +455,8 @@ export class OnThisDay extends LitElement {
     .controls { justify-content: center; }
     /* centred block under the date; its own text reads left-aligned */
     .about {
-      max-width: 460px; margin: -8px auto 24px; text-align: left;
+      /* wide enough that each sentence sits on one line on desktop (~790px needed) */
+      max-width: 820px; margin: -8px auto 24px; text-align: left;
       --info-accent: var(--accent);
       --info-fg: var(--fg);
       --info-muted: var(--muted);
